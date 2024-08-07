@@ -90,8 +90,43 @@ static DWORD g_dwListCnt = 0;
 extern "C" {
 #endif
 
-    int EnumDevices2List(VSCAN_DEVICE_LIST* List);
-    void FreeDeviceList(VSCAN_DEVICE_LIST* List);
+    int EnumDevices2List(VSCAN_DEVICE_LIST* List) {
+        static VSCAN_DEVICE dev[MAX_DEVICES];
+        HKEY hKey;
+        DWORD i, retCode;
+        TCHAR keyName[256];
+        TCHAR portName[256];
+        DWORD keyNameSize, portNameSize;
+        int deviceCount = 0;
+
+        // Open the registry key where the serial ports are listed
+        if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, _T("HARDWARE\\DEVICEMAP\\SERIALCOMM"), 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+            // Enumerate the subkeys and get the port names
+            for (i = 0, retCode = ERROR_SUCCESS; retCode == ERROR_SUCCESS && deviceCount < MAX_DEVICES; i++) {
+                keyNameSize = sizeof(keyName) / sizeof(keyName[0]);
+                portNameSize = sizeof(portName);
+
+                // Get the next subkey name
+                retCode = RegEnumValue(hKey, i, keyName, &keyNameSize, NULL, NULL, (LPBYTE)portName, &portNameSize);
+
+                if (retCode == ERROR_SUCCESS) {
+                    // Add the port name to the device list
+                    sprintf(dev[deviceCount].Location, "\\%s", portName);
+                    dev[deviceCount].Type = VSCAN_DEVICE_TYPE_SERIAL;
+                    List[deviceCount] = &dev[deviceCount];
+                    deviceCount++;
+                }
+            }
+
+            // Close the registry key
+            RegCloseKey(hKey);
+        }
+
+        return deviceCount;
+    }
+    void FreeDeviceList(VSCAN_DEVICE_LIST* List) {
+        memset(List, 0, sizeof(List));
+    }
 
 #ifdef __cplusplus
 }
@@ -157,7 +192,7 @@ static void InitDeviceList(void)
     cnt = SendDlgItemMessage(g_hDlg, IDC_DEVICE_LIST, CB_GETCOUNT, 0, 0);
     for (i = 0; i < cnt; i++)
     {
-        SendDlgItemMessage(g_hDlg, IDC_DEVICE_LIST, CB_DELETESTRING, i, 0);
+        SendDlgItemMessage(g_hDlg, IDC_DEVICE_LIST, CB_DELETESTRING, 0, i);
     }
 
     for (i = 0; i < (int)g_dwListCnt; i++)
